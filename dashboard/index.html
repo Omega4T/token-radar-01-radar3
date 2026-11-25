@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch Radar v5 — Token Launch Radar</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>Launch Radar v5</h1>
+    <p class="sub">Which pre-token protocol to farm next, what its launch would be worth, how likely it is to launch, and the exact steps. Built from one frozen DefiLlama snapshot — every number below is fitted from that snapshot at run time, nothing is hardcoded.</p>
+    <nav><a href="#cover">Cover</a><a href="#board">Board</a><a href="#live">Live-token view</a><a href="#validation">Validation</a></nav>
+  </div>
+</header>
+<main class="wrap">
+
+<section id="cover">
+  <h2>Cover — the radar answers its own checks</h2>
+  <div id="kpis" class="kpis"></div>
+  <div class="grid2">
+    <div class="card"><h3>Value model (fitted at run time)</h3><p id="equation" class="mono"></p><p id="fitnotes"></p></div>
+    <div class="card"><h3>Token odds — a proxy, beside value, never multiplied into it</h3><p id="oddsnotes"></p><p id="calwarn" class="warn"></p></div>
+  </div>
+  <div class="card"><h3>Decision table — validation as selection (value terms)</h3>
+    <p class="small">Each candidate term was tested as an addition on top of the log-TVL baseline on two held-out tests (H1 slug-hash 70/30, H2 stratified by category) and 3 walk-forward folds. KEEP needs median log-error gain &ge; 0.02 on <b>both</b> held-out tests, within-2x down at most 2 points, and no worsening &gt; 0.02 on 2+ folds. Only kept terms enter the final model.</p>
+    <div class="scroll"><table id="vtable"><thead><tr><th>Term</th><th>H1 gain</th><th>H2 gain</th><th>Walk-forward</th><th>Decision</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+    <p id="vnote" class="small"></p>
+  </div>
+  <div class="card"><h3>Decision table — token-odds features</h3>
+    <p class="small">Same machine, AUC/Brier instead of log error. KEEP needs AUC gain &ge; 0.02 on both held-out tests, Brier worse by at most 0.01, and no AUC drop &gt; 0.02 on 2+ walk-forward folds.</p>
+    <div class="scroll"><table id="otable"><thead><tr><th>Feature</th><th>H1 AUC gain</th><th>H2 AUC gain</th><th>Walk-forward</th><th>Decision</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card"><h3>Model limits — read before trusting any number</h3>
+    <ul id="limits">
+      <li>Data is frozen 14 Nov 2026; nothing newer exists in this radar.</li>
+      <li>Implied value is an estimate from historical market-cap/TVL ratios, not a price prediction.</li>
+      <li>Token odds is a proxy: how similar a protocol looks to protocols that (as far as DefiLlama records) already have a token — <b>not</b> the true probability it launches next year. The snapshot records no launch dates, so no real launch hazard can be estimated.</li>
+      <li>Small categories barely move implied value: shrinkage pulls their multiplier toward 1, and categories with fewer than 3 fit-set members get multiplier exactly 1.</li>
+      <li>Terms that failed selection were <b>dropped</b> and are named in the decision tables above — the model does not claim to use them.</li>
+      <li>“Records no token” is not “has no token”: DefiLlama may simply not record a token that exists.</li>
+      <li>Two things cannot be computed from this snapshot and are never claimed: TVL concentration per chain (only a chain list is given) and revenue, active users or volume (not in the snapshot).</li>
+    </ul>
+  </div>
+  <div class="card"><h3>How to read the board</h3>
+    <p>Default order is implied value, highest first. Token odds sits <b>beside</b> implied value in every row — it never changes the order and is never multiplied into it. Use the sort toggle to order by odds instead. Odds bands: Low &lt; 20%, Medium 20–50%, High &gt; 50%. The most informative rows are high implied value with Low odds: worth a lot <i>if</i> it launches, unlikely to launch.</p>
+  </div>
+</section>
+
+<section id="board">
+  <h2>Board — 200 pre-token protocols by implied value</h2>
+  <div class="controls">
+    <label>Search <input id="q" type="search" placeholder="name or slug"></label>
+    <label>Category <select id="fcat"><option value="">All</option></select></label>
+    <label>Chain <select id="fchain"><option value="">All</option></select></label>
+    <label>TVL <select id="ftvl"><option value="">All</option><option value="s">&lt; $100M</option><option value="m">$100M – $1B</option><option value="l">&gt; $1B</option></select></label>
+    <label>Odds band <select id="fodds"><option value="">All</option><option>Rendah</option><option>Sedang</option><option>Tinggi</option></select></label>
+    <label>Sort <select id="sort"><option value="implied">Implied value</option><option value="odds">Token odds</option><option value="tvl">TVL</option><option value="age">Age</option></select></label>
+    <span id="count" class="small"></span>
+  </div>
+  <div class="scroll"><table id="btable"><thead><tr><th>#</th><th>Protocol</th><th>TVL</th><th>7d</th><th>Implied value</th><th>Token odds</th><th></th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="detail">
+  <h2>Detail view</h2>
+  <div id="detailbox" class="card"><p class="small">Pick a row on the board to see its value breakdown, odds breakdown, category multiplier and full farm plan.</p></div>
+</section>
+
+<section id="live">
+  <h2>Live-token view — actual market values, not model estimates</h2>
+  <p class="small">Top 24 token protocols by market cap (excluding CEX). Shown apart from the board so a model estimate is never confused with a market price.</p>
+  <div class="scroll"><table id="livetable"><thead><tr><th>#</th><th>Protocol</th><th>TVL</th><th>Market cap</th><th>mcap / TVL</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="validation">
+  <h2>Validation — full numbers</h2>
+  <div class="card"><h3>Held-out detail (value model)</h3><p id="heldout" class="small"></p>
+  <h3>Odds calibration (held-out predictions, 5 bands)</h3>
+  <div class="grid2"><div><h4>H1 test</h4><div class="scroll"><table id="cal1"><thead><tr><th>Band</th><th>n</th><th>Mean predicted</th><th>Actually token</th><th>Gap</th></tr></thead><tbody></tbody></table></div></div>
+  <div><h4>H2 test</h4><div class="scroll"><table id="cal2"><thead><tr><th>Band</th><th>n</th><th>Mean predicted</th><th>Actually token</th><th>Gap</th></tr></thead><tbody></tbody></table></div></div></div>
+  <p class="small">Calibration is reported only. No Platt or isotonic rescaling fitted on test data is applied to the odds shown. A band is flagged when predicted vs actual differ by more than 15 points on both held-out tests.</p></div>
+</section>
+
+</main>
+<footer class="wrap"><p id="prov" class="small"></p><p class="small">Launch Radar v5 — every value term kept or dropped on two held-out tests plus walk-forward, token odds beside implied value, category shrinkage. Entered on make.fun for the token-radar-01 bounty.</p></footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

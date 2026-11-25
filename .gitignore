@@ -1,0 +1,8 @@
+snapshot.json
+out/
+outA/
+outB/
+*.env
+*.key
+*.pem
+credentials
