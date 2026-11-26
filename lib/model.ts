@@ -64,7 +64,12 @@ export const dot = (beta: number[], row: number[]): number =>
   row.reduce((s, x, j) => s + x * beta[j]!, 0);
 
 // Logistic regression by batch gradient descent on standardised features.
-// Deterministic: fixed iteration count, fixed step, zero start.
+// Deterministic: fixed step, zero start, at most `iters` iterations.
+// Early stop: once the largest gradient component drops below 1e-6 the
+// remaining updates move beta by < 1e-9 per step, so the fit has
+// converged and further iterations only burn CPU. The stop depends only
+// on the data, never on wall time, so runs stay deterministic. Fits that
+// have not converged by the cap still run the full 800 iterations.
 export function logisticFit(design: number[][], y: number[], iters = 800, lr = 0.5): number[] {
   const k = design[0]!.length;
   const beta = new Array<number>(k).fill(0);
@@ -75,6 +80,9 @@ export function logisticFit(design: number[][], y: number[], iters = 800, lr = 0
       const err = 1 / (1 + Math.exp(-z)) - y[i]!;
       for (let j = 0; j < k; j++) grad[j]! += err * design[i]![j]!;
     }
+    let maxGrad = 0;
+    for (let j = 0; j < k; j++) maxGrad = Math.max(maxGrad, Math.abs(grad[j]!));
+    if (maxGrad < 1e-6) break;
     for (let j = 0; j < k; j++) beta[j]! -= (lr * grad[j]!) / design.length;
   }
   return beta;
@@ -87,9 +95,22 @@ export function auc(y: number[], score: number[]): number {
   const neg: number[] = [];
   y.forEach((v, i) => (v === 1 ? pos : neg).push(score[i]!));
   if (pos.length === 0 || neg.length === 0) return 0.5;
-  let concordant = 0;
-  for (const a of pos) for (const b of neg) concordant += a > b ? 1 : a === b ? 0.5 : 0;
-  return concordant / (pos.length * neg.length);
+  // Rank-based Mann-Whitney U: exactly the pairwise concordance (a tie
+  // contributes 0.5 via the average rank), but O(n log n) instead of
+  // O(pos x neg) — the pairwise loop is the only superlinear piece.
+  const order = score.map((_, i) => i).sort((a, b) => score[a]! - score[b]!);
+  let rankSumPos = 0;
+  let i = 0;
+  while (i < order.length) {
+    let j = i;
+    while (j + 1 < order.length && score[order[j + 1]!] === score[order[i]!]) j++;
+    const avgRank = (i + 1 + j + 1) / 2; // 1-based average rank of the tie group
+    for (let k = i; k <= j; k++) if (y[order[k]!] === 1) rankSumPos += avgRank;
+    i = j + 1;
+  }
+  const nPos = pos.length;
+  const nNeg = neg.length;
+  return (rankSumPos - (nPos * (nPos + 1)) / 2) / (nPos * nNeg);
 }
 
 export const brier = (y: number[], p: number[]): number =>
@@ -573,6 +594,12 @@ export function selectOddsModel(
   const h2Train = idx.filter((i) => !h2Set.has(all[i]!.slug));
   const folds = walkForwardFolds(all);
 
+  // Baseline (log-TVL-only) logistic fit depends only on the train set,
+  // but evalOdds re-fits it on every call — the same train set recurs
+  // for every term and every K (~47 redundant refits). Cache it per
+  // train set; the fit is a pure function of (trainIdx, labels, feats).
+  const baseFitCache = new Map<string, { x1m: number; x1s: number; beta: number[] }>();
+
   const evalOdds = (
     trainIdx: number[],
     testIdx: number[],
@@ -600,13 +627,21 @@ export function selectOddsModel(
     const pred = testIdx.map((i) => sigmoid(dot(beta, row(i))));
     const truth = testIdx.map((i) => labels[i]!);
     // Baseline: logistic on log TVL only, standardised on the same train set.
-    const x1vals = trainIdx.map((i) => feats[i]!.x1);
-    const x1m = mean(x1vals);
-    const x1s = std(x1vals);
-    const baseBeta2 = logisticFit(
-      trainIdx.map((i) => [1, (feats[i]!.x1 - x1m) / x1s]),
-      trainIdx.map((i) => labels[i]!),
-    );
+    // Cached per train set (see baseFitCache above).
+    const cacheKey = trainIdx.join(',');
+    let base = baseFitCache.get(cacheKey);
+    if (base === undefined) {
+      const x1vals = trainIdx.map((i) => feats[i]!.x1);
+      const x1m = mean(x1vals);
+      const x1s = std(x1vals);
+      const beta = logisticFit(
+        trainIdx.map((i) => [1, (feats[i]!.x1 - x1m) / x1s]),
+        trainIdx.map((i) => labels[i]!),
+      );
+      base = { x1m, x1s, beta };
+      baseFitCache.set(cacheKey, base);
+    }
+    const { x1m, x1s, beta: baseBeta2 } = base;
     const basePred = testIdx.map((i) => sigmoid(dot(baseBeta2, [1, (feats[i]!.x1 - x1m) / x1s])));
     return {
       auc: auc(truth, pred),
