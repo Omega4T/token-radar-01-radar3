@@ -47,19 +47,30 @@ function parseArgs(argv: string[]): { input: string; output: string } {
 
 // Deterministic JSON: fixed key order from object construction, fixed
 // float rounding upstream, trailing newline (§5.6).
+function chmodQuiet(path: string, mode: number): void {
+  // The grader's /output is pre-created by another uid: chmod on a path we
+  // do not own throws EPERM, and that must never kill the run. The attempt
+  // stays so outputs remain world-readable when we do own them.
+  try {
+    chmodSync(path, mode);
+  } catch {
+    // Non-fatal: best-effort readability only.
+  }
+}
+
 function writeJson(path: string, value: unknown): void {
   writeFileSync(path, JSON.stringify(value, null, 2) + '\n', 'utf8');
-  chmodSync(path, 0o644);
+  chmodQuiet(path, 0o644);
 }
 
 function writeText(path: string, text: string): void {
   writeFileSync(path, text, 'utf8');
-  chmodSync(path, 0o644);
+  chmodQuiet(path, 0o644);
 }
 
 function mkdirMode(path: string): void {
   mkdirSync(path, { recursive: true });
-  chmodSync(path, 0o755);
+  chmodQuiet(path, 0o755);
 }
 
 interface BoardRow {
@@ -478,12 +489,12 @@ function main(): void {
   cpSync(join(REPO_ROOT, 'dashboard'), dashboardOut, { recursive: true });
   for (const f of readdirSync(dashboardOut, { recursive: true }) as string[]) {
     const p = join(dashboardOut, f);
-    if (statSync(p).isFile()) chmodSync(p, 0o644);
+    if (statSync(p).isFile()) chmodQuiet(p, 0o644);
   }
   cpSync(join(REPO_ROOT, 'screenshots'), screenshotsOut, { recursive: true });
   for (const f of readdirSync(screenshotsOut) as string[]) {
     const p = join(screenshotsOut, f);
-    if (statSync(p).isFile()) chmodSync(p, 0o644);
+    if (statSync(p).isFile()) chmodQuiet(p, 0o644);
   }
 
   // Dossier LAST, from the vendor library, byte for byte what the scorer
@@ -494,7 +505,7 @@ function main(): void {
     dashboard: { max_files: 400, max_bytes: 4 * 1024 * 1024 },
   });
   writeFileSync(join(output, 'dossier.json'), dossier);
-  chmodSync(join(output, 'dossier.json'), 0o644);
+  chmodQuiet(join(output, 'dossier.json'), 0o644);
   if (dossier.length > 1.5 * 1024 * 1024) fail(`dossier.json ${dossier.length} bytes, over the 1.5 MiB gate`);
 
   console.log(
